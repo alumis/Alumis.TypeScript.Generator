@@ -177,37 +177,17 @@ namespace Alumis.TypeScript.Generator
             if (File.Exists(absoluteTypeScriptFilePath))
                 File.Delete(absoluteTypeScriptFilePath);
 
-            var methodInfoList = controllerType
-                .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-                .Where(m => m.DeclaringType != typeof(Controller) && typeof(Controller).IsAssignableFrom(m.DeclaringType))
-                .Where(m => m.GetBaseDefinition() == m).ToList();
-
             var streamOutput = File.CreateText(absoluteTypeScriptFilePath);
             streamOutput.WriteLine("import { CancellationToken } from '@alumis/cancellationtoken';");
             streamOutput.WriteLine("import { getJsonAsync, postAsync, postParseJsonAsync } from '@alumis/http';"); 
 
-            var relativePathToTypings = CalculateRelativeFilePath(absoluteTypeScriptFilePath, AbsoluteTypingsOutputPath);
-            var memberTypes = new List<string>();
-
-            foreach(var m in methodInfoList)
-            {
-                var returnType = GetMethodReturnType(m);
-
-                if (IsTypeEnumerable(returnType))
-                    returnType = GetEnumerableArgument(returnType);
-
-                var memberTypeName = GetMemberTypeName(returnType);
-
-                if (!_compiledTypes.Contains(returnType))
-                    continue;
-
-                memberTypes.Add(memberTypeName);
-            }
-
-            streamOutput.WriteLine($"import {{ {string.Join(", ", memberTypes.Distinct())} }} from '{relativePathToTypings.Replace(".d.ts","")}';");
-
             streamOutput.WriteLine("");
             streamOutput.WriteLine($"export class {className} {{");
+
+            var methodInfoList = controllerType
+                .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                .Where(m => m.DeclaringType != typeof(Controller) && typeof(Controller).IsAssignableFrom(m.DeclaringType))
+                .Where(m => m.GetBaseDefinition() == m).ToList();
 
             foreach(var m in methodInfoList)
             {
@@ -218,9 +198,9 @@ namespace Alumis.TypeScript.Generator
 
                 var parameters = m.GetParameters().ToList();
                 streamOutput.WriteLine($"{INDENTATION}");
-                streamOutput.WriteLine($"{INDENTATION}static async {CamelCase(m.Name)}Async(data: {{{string.Join(", ", parameters.Select(p => CompileParameter(p)))}}}, cancellationToken: CancellationToken) {{");                
+                streamOutput.WriteLine($"{INDENTATION}static async {CamelCase(m.Name)}Async(data: {{{string.Join(", ", parameters.Select(p => CompileParameter(p)))}}}, cancellationToken?: CancellationToken) {{");                
                 streamOutput.WriteLine($"{INDENTATION.Repeat(2)}");
-                streamOutput.WriteLine($"{INDENTATION.Repeat(2)}const args = {{ url: '{controllerName}/{m.Name}', data: data, headers: null, cancellationToken: cancellationToken }};");
+                streamOutput.WriteLine($"{INDENTATION.Repeat(2)}const args = <IHttpOptions>{{ url: '{controllerName}/{m.Name}', data: data }};");
                 streamOutput.WriteLine($"{INDENTATION.Repeat(2)}");
 
                 if (m.GetCustomAttribute<HttpPostAttribute>() != null)
@@ -228,10 +208,10 @@ namespace Alumis.TypeScript.Generator
                     var returnType = GetMethodReturnType(m);
 
                     if (returnType == typeof(void))                    
-                        streamOutput.WriteLine($"{INDENTATION.Repeat(2)}return await postAsync(args)");
+                        streamOutput.WriteLine($"{INDENTATION.Repeat(2)}return await postAsync(args, cancellationToken)");
 
                     else
-                        streamOutput.WriteLine($"{INDENTATION.Repeat(2)}return await postParseJsonAsync<{GetMemberTypeName(returnType)}>(args);");
+                        streamOutput.WriteLine($"{INDENTATION.Repeat(2)}return await postParseJsonAsync<{GetMemberTypeName(returnType)}>(args, cancellationToken);");
                     
                 }
                 else
@@ -239,14 +219,14 @@ namespace Alumis.TypeScript.Generator
                     var returnType = GetMethodReturnType(m);
 
                     if (returnType == typeof(void))                    
-                        streamOutput.WriteLine($"{INDENTATION.Repeat(2)}return await getAsync(args);");
+                        streamOutput.WriteLine($"{INDENTATION.Repeat(2)}return await getAsync(args, cancellationToken);");
                     
                     else                    
-                        streamOutput.WriteLine($"{INDENTATION.Repeat(2)}return await getJsonAsync<{GetMemberTypeName(returnType)}>(args);");                
+                        streamOutput.WriteLine($"{INDENTATION.Repeat(2)}return await getJsonAsync<{GetMemberTypeName(returnType)}>(args, cancellationToken);");                
                 }
 
                 // method end
-                streamOutput.WriteLine($"{INDENTATION}}}");                
+                streamOutput.WriteLine($"{INDENTATION}}}");           
             }
 
             streamOutput.WriteLine("}");
@@ -359,14 +339,14 @@ namespace Alumis.TypeScript.Generator
 
             if (type.IsEnum)
             {
-                sb.AppendLine($"{INDENTATION}export const enum {compiledType.Name} {{");
+                sb.AppendLine($"const enum {compiledType.Name} {{");
 
                 var names = type.GetEnumNames();
                 var values = type.GetEnumValues();
 
                 for (var i = 0; i < names.Length; ++i)
                 {
-                    sb.Append($"{INDENTATION.Repeat(2)}{names[i]} = {(int)values.GetValue(i)}");
+                    sb.Append($"{INDENTATION}{names[i]} = {(int)values.GetValue(i)}");
 
                     if (i != names.Length - 1)
                         sb.Append(",");
@@ -382,7 +362,7 @@ namespace Alumis.TypeScript.Generator
                 if (compiledType.Name == "Object")
                     Debugger.Break();
 
-                var firstLine = $"{INDENTATION}export interface {compiledType.Name} ";
+                var firstLine = $"interface {compiledType.Name} ";
                 var inherits = type == typeof(object) ? new List<Type>() : type.GetInterfaces().Concat(new[] { type.BaseType }).Where(t => _types.Contains(t)).ToList();
 
                 if (inherits.Any())
@@ -401,7 +381,7 @@ namespace Alumis.TypeScript.Generator
 
                 foreach (var p in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).Where(p2 => ShouldIncludeProperty(p2)))
                 {
-                    var line = INDENTATION + INDENTATION + CamelCase(p.Name);
+                    var line = INDENTATION + CamelCase(p.Name);
 
                     if (p.PropertyType.IsGenericType && p.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>))
                         line += "?";
@@ -411,7 +391,8 @@ namespace Alumis.TypeScript.Generator
                 }
             }
 
-            sb.AppendLine(INDENTATION + "}");
+            sb.AppendLine("}");
+            sb.AppendLine("");
             compiledType.Value = sb.ToString();
             _compiledTypes[type] = compiledType;
         }
