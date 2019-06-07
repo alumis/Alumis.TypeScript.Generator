@@ -35,7 +35,7 @@ namespace Alumis.TypeScript.Generator
         {
             get
             {
-                return Path.Combine(Directory.GetCurrentDirectory(), _configJson.TypeScriptOuputPath);
+                return Path.Combine(Directory.GetCurrentDirectory(), _configJson.TypeScriptOutputPath);
             }
         }
 
@@ -45,9 +45,10 @@ namespace Alumis.TypeScript.Generator
 
         static void Main(string[] args)
         {
-            #if DEBUG
+            /*#if DEBUG
                 Directory.SetCurrentDirectory(Path.Combine(Directory.GetCurrentDirectory(),"../whistleportal/WhistlePortal.Web"));
             #endif
+            */
 
             ProcessArgs(args);
 
@@ -60,7 +61,7 @@ namespace Alumis.TypeScript.Generator
 
             var assembly = Assembly.LoadFrom(Path.Combine(currentDirectory, _configJson.AssemblyPath));
 
-            CompileTypesOfAssembly(assembly);
+            CompileTypesFromAssembly(assembly);
             FlushOutput();
         }
 
@@ -78,49 +79,45 @@ namespace Alumis.TypeScript.Generator
                     if (i == args.Length - 1)
                         throw new ArgumentException("Missing required path value for the --config argument.");
                     
-                    var path = args[i++];
-                    var absolutePath = Path.Combine(Directory.GetCurrentDirectory(), path);
+                    var path = args[++i];
+                    var absoluteConfigPath = Path.Combine(Directory.GetCurrentDirectory(), path);
 
-                    _configJson = ReadConfigFile(absolutePath);
+                    _configJson = ReadConfigFile(absoluteConfigPath);
 
-                    Directory.SetCurrentDirectory(Path.GetDirectoryName(absolutePath));
+                    Directory.SetCurrentDirectory(Path.GetDirectoryName(absoluteConfigPath));
                 }
             }
         }
 
         static ConfigJson ReadConfigFile(string path)
         {
-            if (!File.Exists(path))
-            {
-                throw new ArgumentException($"Could not find config file in {path}.");
-            }
+            if (!File.Exists(path))            
+                throw new ArgumentException($"Could not find config file in {path}.");            
 
             var configText = File.ReadAllText(path);
             var configJson = JsonConvert.DeserializeObject<ConfigJson>(configText);
 
             var exceptions = new List<Exception>();
 
-            if (string.IsNullOrEmpty(configJson.TypeScriptOuputPath))
+            if (string.IsNullOrEmpty(configJson.TypeScriptOutputPath))
             {
-                exceptions.Add(new ArgumentNullException($"Config file is missing required property {nameof(configJson.TypeScriptOuputPath)}."));
+                throw new ArgumentException("Config file is missing required property TypeScriptOutputPath.");
             }
 
-            if (!configJson.TypeScriptOuputPath.EndsWith('/'))
-                configJson.TypeScriptOuputPath += '/';
+            if (!configJson.TypeScriptOutputPath.EndsWith('/'))
+                configJson.TypeScriptOutputPath += '/';
 
             if (string.IsNullOrEmpty(configJson.TypingsOutputPath))
             {
-                exceptions.Add(new ArgumentException($"Config file is missing required property {nameof(configJson.TypingsOutputPath)}"));
+                throw new ArgumentException("Config file is missing required property TypingsOutputPath");
             }
 
             if (!configJson.TypingsOutputPath.EndsWith(".d.ts"))
             {
-                configJson.TypingsOutputPath += DEFAULT_TYPINGS_FILE_NAME;
-            }
+                if (!configJson.TypingsOutputPath.EndsWith('/'))
+                    configJson.TypingsOutputPath += '/';
 
-            if (exceptions.Count > 0)
-            {
-                throw new AggregateException(exceptions);
+                configJson.TypingsOutputPath += DEFAULT_TYPINGS_FILE_NAME;
             }
 
             return configJson;
@@ -140,12 +137,7 @@ namespace Alumis.TypeScript.Generator
                 s.Flush();
         }
 
-        static string CalculateRelativeFilePath(string absoluteStartPath, string absoluteEndPath)
-        {
-            return new Uri(absoluteStartPath).MakeRelativeUri(new Uri(absoluteEndPath)).ToString();
-        }
-
-        static void CompileTypesOfAssembly(Assembly assembly)
+        static void CompileTypesFromAssembly(Assembly assembly)
         {
             var assemblyTypes = assembly.GetTypes();
             var controllerTypes = assemblyTypes.Where(t => typeof(Controller).IsAssignableFrom(t)).ToList();
@@ -179,7 +171,7 @@ namespace Alumis.TypeScript.Generator
 
             var streamOutput = File.CreateText(absoluteTypeScriptFilePath);
             streamOutput.WriteLine("import { CancellationToken } from '@alumis/cancellationtoken';");
-            streamOutput.WriteLine("import { getJsonAsync, postAsync, postParseJsonAsync } from '@alumis/http';"); 
+            streamOutput.WriteLine("import { getAsync, getJsonAsync, postAsync, postParseJsonAsync, IHttpOptions } from '@alumis/http';"); 
 
             streamOutput.WriteLine("");
             streamOutput.WriteLine($"export class {className} {{");
