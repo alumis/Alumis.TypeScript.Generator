@@ -36,7 +36,7 @@ namespace Alumis.TypeScript.Generator
 
             var streamOutput = File.CreateText(absoluteTypeScriptFilePath);
             streamOutput.WriteLine("import { CancellationToken } from '@alumis/cancellationtoken';");
-            streamOutput.WriteLine("import { getJsonAsync, postAsync, postParseJsonAsync, IHttpOptions } from '@alumis/http';"); 
+            streamOutput.WriteLine("import { getAsync, getJsonAsync, postAsync, postParseJsonAsync, IHttpOptions } from '@alumis/http';"); 
             streamOutput.WriteLine("");
             streamOutput.WriteLine($"export class {className} {{");
 
@@ -54,24 +54,27 @@ namespace Alumis.TypeScript.Generator
 
                 var parameters = m.GetParameters().ToList();
                 streamOutput.WriteLine($"{INDENTATION}");
-                streamOutput.WriteLine($"{INDENTATION}static async {CamelCase(m.Name)}Async(data: {{{string.Join(", ", parameters.Select(p => CompileParameter(p)))}}}, cancellationToken?: CancellationToken) {{");                
+                streamOutput.WriteLine($"{INDENTATION}static {CamelCase(m.Name)}Async(data: {{{string.Join(", ", parameters.Select(p => CompileParameter(p)))}}}, cancellationToken?: CancellationToken) {{");                
                 streamOutput.WriteLine($"{INDENTATION.Repeat(2)}");
                 streamOutput.WriteLine($"{INDENTATION.Repeat(2)}const args = <IHttpOptions>{{ url: '{controllerName}/{m.Name}', data: data }};");
                 streamOutput.WriteLine($"{INDENTATION.Repeat(2)}");
 
-                if (m.GetCustomAttribute<HttpPostAttribute>() != null)
-                {
-                    var returnType = GetMethodReturnType(m);
+                var returnType = GetMethodReturnType(m);
 
+                if (m.GetCustomAttribute<HttpPostAttribute>() != null)
+                {                
                     if (returnType == typeof(void))                    
-                        streamOutput.WriteLine($"{INDENTATION.Repeat(2)}return await postAsync(args, cancellationToken)");
+                        streamOutput.WriteLine($"{INDENTATION.Repeat(2)}return postAsync(args, cancellationToken)");
 
                     else
-                        streamOutput.WriteLine($"{INDENTATION.Repeat(2)}return await postParseJsonAsync<{GetMemberTypeName(returnType)}>(args, cancellationToken);");                    
+                        streamOutput.WriteLine($"{INDENTATION.Repeat(2)}return postParseJsonAsync<{GetMemberTypeName(returnType)}>(args, cancellationToken);");                    
                 }
                 else
-                {                                          
-                    streamOutput.WriteLine($"{INDENTATION.Repeat(2)}return await getJsonAsync<{GetMemberTypeName(GetMethodReturnType(m))}>(args, cancellationToken);");                
+                {   
+                    if (returnType == typeof(string))
+                        streamOutput.WriteLine($"{INDENTATION.Repeat(2)}return getAsync(args, cancellationToken);");
+                    
+                    else streamOutput.WriteLine($"{INDENTATION.Repeat(2)}return getJsonAsync<{GetMemberTypeName(returnType)}>(args, cancellationToken);");
                 }
 
                 // method end

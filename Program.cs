@@ -12,6 +12,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Runtime.CompilerServices;
 using System.Collections;
+using System.Runtime.Loader;
 
 namespace Alumis.TypeScript.Generator
 {
@@ -42,7 +43,7 @@ namespace Alumis.TypeScript.Generator
             var currentDirectory = Directory.GetCurrentDirectory();
 
             if (configJson == null)
-                configJson = ReadConfigFile(Path.Combine(currentDirectory, "tsgenerator.json"));
+                configJson = ReadConfigFile(Path.Combine(currentDirectory, "tsgenerator.json"));            
 
             foreach(var a in configJson.Assemblies)            
                 new AssemblyTypeCompiler(a, configJson.TypingsOutputPath, configJson.TypeScriptOutputPath).CompileAndFlush();

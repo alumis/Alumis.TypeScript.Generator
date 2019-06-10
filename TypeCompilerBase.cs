@@ -133,6 +133,9 @@ namespace Alumis.TypeScript.Generator
 
         protected bool ShouldIncludeProperty(PropertyInfo property)
         {
+            if (property.Name == "N")
+                Debugger.Break();
+
             var attr = property.GetCustomAttribute<TypeScriptAttribute>();
 
             if (attr != null && !attr.Include)
@@ -228,9 +231,6 @@ namespace Alumis.TypeScript.Generator
 
             if (type.IsEnum)
             {
-                if (!_types.Contains(type))
-                    Debugger.Break();
-
                 CompileType(type);
                 return ((CompiledType)CompiledTypes[type]).Name;
             }
@@ -302,6 +302,7 @@ namespace Alumis.TypeScript.Generator
             if (type.IsEnum)
             {
                 sb.AppendLine($"declare const enum {compiledType.Name} {{");
+                sb.AppendLine("");
 
                 var names = type.GetEnumNames();
                 var values = type.GetEnumValues();
@@ -325,6 +326,7 @@ namespace Alumis.TypeScript.Generator
                     Debugger.Break();
 
                 var firstLine = $"interface {compiledType.Name} ";
+                
                 var inherits = type == typeof(object) ? new List<Type>() : type.GetInterfaces().Concat(new[] { type.BaseType }).Where(t => _types.Contains(t)).ToList();
 
                 if (inherits.Any())
@@ -338,6 +340,7 @@ namespace Alumis.TypeScript.Generator
                 firstLine += "{";
 
                 sb.AppendLine(firstLine);
+                sb.AppendLine("");
 
                 // Body
 
